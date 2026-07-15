@@ -12,11 +12,11 @@
 
 **新建有声书**（上传 TXT、选声音、调语速、试听）：
 
-<img src="docs/new-book.jpg" width="380" alt="新建有声书">
+<img src="docs/new-book.jpg" width="450" alt="新建有声书">
 
 **书籍详情 / 生成进度**（进度条、章节状态、试听 / 下载 / 重生）：
 
-<img src="docs/book-detail.jpg" width="600" alt="书籍详情">
+<img src="docs/book-detail.jpg" width="700" alt="书籍详情">
 
 ---
 

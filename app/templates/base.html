@@ -1,0 +1,30 @@
+{% macro status_badge(s) -%}
+{% if s == 'done' %}<span class="badge ok">已完成</span>
+{% elif s == 'running' or s == 'generating' %}<span class="badge run">生成中</span>
+{% elif s == 'failed' %}<span class="badge fail">失败</span>
+{% elif s == 'pending' %}<span class="badge wait">待处理</span>
+{% else %}<span class="badge">{{ s }}</span>{% endif %}
+{%- endmacro %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}BookToVoice{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">📚 BookToVoice</a>
+    <nav>
+      <a href="/">书架</a>
+      <a href="/books/new">＋ 新建有声书</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="foot">TXT 小说 → 章节切分 → Edge-TTS → 章节 MP3</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

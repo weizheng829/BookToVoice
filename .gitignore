@@ -1,0 +1,79 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 打包产物
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+sdist/
+wheels/
+
+# 测试 / 类型检查 / 覆盖率缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# pip 缓存日志
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ===== 环境变量 / 密钥（切勿上传）=====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== 运行时数据（应用自动生成，含个人 / 版权内容）=====
+# SQLite 数据库及其 WAL/SHM 临时文件
+data/*
+!data/.gitkeep
+
+# 输入的书籍文本
+input/*
+!input/.gitkeep
+
+# 合成的音频产物
+output/*
+!output/.gitkeep
+
+# 旧的音频输出目录（见 .dockerignore）
+easyvoice-audio/
+
+# ===== IDE / 编辑器 =====
+# PyCharm / IntelliJ
+.idea/
+# VS Code
+.vscode/
+*.code-workspace
+# Jupyter
+.ipynb_checkpoints/
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ===== 日志 =====
+*.log
+logs/

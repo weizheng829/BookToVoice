@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "base.html" import status_badge %}
+{% block title %}{{ book.name }} · BookToVoice{% endblock %}
+{% block content %}
+<div class="detail-head">
+  <div>
+    <h1>{{ book.name }}</h1>
+    <div class="meta">声音 {{ voice_map.get(book.voice, book.voice) }} · 语速 {{ book.rate }} · 共 {{ progress.total }} 章</div>
+  </div>
+  <div class="detail-actions">
+    <button class="btn" data-name="{{ book.name }}" onclick="downloadBook(this, {{ book.id }})">⬇ 打包下载 ZIP</button>
+    {% if book.paused %}
+    <form method="post" action="/books/{{ book.id }}/resume" class="inline">
+      <button class="btn primary" type="submit">▶ 继续生成</button>
+    </form>
+    {% else %}
+    <form method="post" action="/books/{{ book.id }}/pause" class="inline">
+      <button class="btn" type="submit">⏸ 暂停生成</button>
+    </form>
+    {% endif %}
+    <a class="btn" href="/">← 返回书架</a>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-bar"><div id="bar" style="width:{{ progress.percent }}%"></div></div>
+  <div id="prog-text" class="progress-text">
+    {{ progress.done }}/{{ progress.total }} 完成（{{ progress.percent }}%）{% if progress.failed %} · {{ progress.failed }} 失败{% endif %}
+  </div>
+</div>
+
+<details class="settings">
+  <summary>设置</summary>
+  <form method="post" action="/books/{{ book.id }}/settings" class="settings-form">
+    <div class="setting-row">
+      <label class="field small">
+        <span>声音</span>
+        <select name="voice">
+          {% for v, label in voices %}
+          <option value="{{ v }}" {{ 'selected' if v == book.voice else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="field small">
+        <span>语速 <span class="rate-display">{{ book.rate }}</span></span>
+        <div class="rate-control">
+          <input type="range" class="rate-range" min="-100" max="100" step="5" value="0">
+          <input type="number" class="rate-num" min="-100" max="100" step="5" value="0">
+        </div>
+        <input type="hidden" name="rate" value="{{ book.rate }}">
+      </div>
+    </div>
+    <label class="field small">
+      <span>书名</span>
+      <input type="text" name="name" value="{{ book.name }}">
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" name="narrate_title" {{ 'checked' if book.narrate_title else '' }}>
+      <span>朗读章节标题（仅影响未生成章节）</span>
+    </label>
+    <div class="preview-box">
+      <div class="preview-title">🔊 试听当前声音</div>
+      <label class="field" style="margin-bottom:8px">
+        <span>试听文本</span>
+        <textarea class="preview-text" rows="2">这是一段测试文本，用于试听语音效果。</textarea>
+      </label>
+      <div class="preview-actions">
+        <button type="button" class="btn small" onclick="previewVoice(this)">▶ 试听</button>
+        <a class="btn tiny preview-download" style="display:none">⬇ 下载</a>
+        <audio class="preview-audio" controls style="display:none"></audio>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button class="btn primary small" type="submit">保存设置</button>
+    </div>
+  </form>
+</details>
+
+<table class="chapters" id="chapters">
+  <thead><tr><th>#</th><th>章节</th><th>状态</th><th>操作</th></tr></thead>
+  <tbody>
+    {% for c in chapters %}
+    <tr data-id="{{ c.id }}">
+      <td class="idx">{{ c.idx }}</td>
+      <td class="title">{{ c.title }}</td>
+      <td class="status-cell">{{ status_badge(c.status) }}{% if c.error %}<div class="err">{{ c.error }}</div>{% endif %}</td>
+      <td class="ops">
+        {% if c.status == 'done' and c.audio_path %}
+        <a class="link" href="/books/{{ book.id }}/chapters/{{ c.id }}/audio">▶ 试听/下载</a>
+        {% endif %}
+        <form method="post" action="/books/{{ book.id }}/chapters/{{ c.id }}/regenerate" class="inline">
+          <button class="btn tiny" type="submit">重生</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block scripts %}
+<script>window.BOOK_ID = {{ book.id }};</script>
+<script src="/static/app.js?v=7"></script>
+{% endblock %}

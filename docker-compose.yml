@@ -1,0 +1,11 @@
+services:
+  book-service:
+    image: booktovoice:latest
+    container_name: book-service
+    ports:
+      - 3033:3033
+    volumes:
+      - /volume2/SSD/docker/bookToVoice/input:/app/input
+      - /volume2/SSD/docker/bookToVoice/output:/app/output
+      - /volume2/SSD/docker/bookToVoice/data:/app/data
+    restart: always

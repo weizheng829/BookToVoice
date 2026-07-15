@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}新建有声书 · BookToVoice{% endblock %}
+{% block content %}
+<h1>新建有声书</h1>
+<form class="form" method="post" action="/books" enctype="multipart/form-data">
+  <label class="field">
+    <span>书名（留空则用文件名）</span>
+    <input type="text" name="name" placeholder="例如：雪中悍刀行">
+  </label>
+  <div class="field">
+    <span>TXT 文件</span>
+    <div class="drop-zone" id="drop-zone">
+      <div class="drop-icon">📖</div>
+      <div class="drop-title">拖拽 TXT 文件到此处</div>
+      <div class="drop-sub">或 <span class="link">点击选择文件</span></div>
+      <div class="file-name" id="file-name"></div>
+    </div>
+    <input type="file" name="file" id="file-input" accept=".txt" required style="display:none">
+  </div>
+  <label class="field">
+    <span>配音声音</span>
+    <select name="voice">
+      {% for v, label in voices %}
+      <option value="{{ v }}" {{ 'selected' if v == default_voice else '' }}>{{ label }}（{{ v }}）{{ ' · 默认' if v == default_voice else '' }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="field">
+    <span>语速 <span class="rate-display">+0%</span></span>
+    <div class="rate-control">
+      <input type="range" class="rate-range" min="-100" max="100" step="5" value="0">
+      <input type="number" class="rate-num" min="-100" max="100" step="5" value="0">
+    </div>
+    <input type="hidden" name="rate" value="+0%">
+  </div>
+  <div class="preview-box">
+    <label class="field" style="margin-bottom:8px">
+      <span>试听文本</span>
+      <textarea class="preview-text" rows="2">这是一段测试文本，用于试听语音效果。</textarea>
+    </label>
+    <div class="preview-actions">
+      <button type="button" class="btn small" onclick="previewVoice(this)">▶ 试听</button>
+      <a class="btn tiny preview-download" style="display:none">⬇ 下载</a>
+      <audio class="preview-audio" controls style="display:none"></audio>
+    </div>
+  </div>
+  <label class="checkbox">
+    <input type="checkbox" name="narrate_title" {{ 'checked' if narrate_default else '' }}>
+    <span>朗读章节标题（每章开头念一遍标题）</span>
+  </label>
+  <div class="actions">
+    <button class="btn primary" type="submit">上传并开始生成</button>
+    <a class="btn" href="/">取消</a>
+  </div>
+  <p class="hint">提示：TXT 需含「第一章 / 第1章 / Chapter 1 / 1、」等形式的开头，否则将按字数自动分块。</p>
+</form>
+{% endblock %}
+{% block scripts %}
+<script src="/static/app.js?v=7"></script>
+{% endblock %}

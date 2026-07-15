@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "base.html" import status_badge %}
+{% block title %}书架 · BookToVoice{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>我的书架</h1>
+  <a class="btn primary" href="/books/new">＋ 新建有声书</a>
+</div>
+{% if books %}
+<div class="book-grid">
+  {% for b in books %}
+  <a class="card" href="/books/{{ b.id }}">
+    <div class="card-title">{{ b.name }}</div>
+    <div class="card-meta">{{ status_badge(b.status) }}</div>
+    <div class="card-sub">{{ b.total_chapters }} 章 · {{ voice_map.get(b.voice, b.voice) }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <p>还没有有声书。</p>
+  <a class="btn primary" href="/books/new">＋ 上传第一本 TXT</a>
+</div>
+{% endif %}
+{% endblock %}

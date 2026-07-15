@@ -58,6 +58,11 @@ output/*
 # 旧的音频输出目录（见 .dockerignore）
 easyvoice-audio/
 
+# ===== Docker 镜像导出包（体积大，勿提交到 Git）=====
+*.tar
+*.tar.gz
+*.tgz
+
 # ===== IDE / 编辑器 =====
 # PyCharm / IntelliJ
 .idea/

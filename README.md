@@ -30,6 +30,8 @@
   - [前置条件](#前置条件)
   - [打包 + 部署（离线镜像）](#打包--部署离线镜像)
     - [1. 开发机构建并导出镜像](#1-开发机构建并导出镜像)
+      - [方式一：NAS 与开发机同架构（x86\_64）](#方式一nas-与开发机同架构x86_64)
+      - [方式二：在 Windows 上打包 ARM64 镜像（给 RK3588 等 ARM NAS）](#方式二在-windows-上打包-arm64-镜像给-rk3588-等-arm-nas)
     - [2. 传到 NAS](#2-传到-nas)
     - [3. NAS 导入镜像](#3-nas-导入镜像)
     - [4. 用 compose 启动](#4-用-compose-启动)
@@ -108,21 +110,46 @@ bookToVoice/
 
 ### 1. 开发机构建并导出镜像
 
-在装了 Docker 的开发机（Windows/Mac/Linux）上，项目根目录执行：
+> **先确认目标 NAS 的 CPU 架构**——在 NAS 上执行 `uname -m`：
+> - 输出 `x86_64` → 开发机与 NAS 同架构，用**方式一**（默认构建）。
+> - 输出 `aarch64` / `arm64`（如 **RK3588 / RK3588C**、树莓派 4/5）→ 用**方式二**（跨架构构建）。
+
+#### 方式一：NAS 与开发机同架构（x86_64）
+
+开发机和 NAS 都是 Intel/AMD 时，用默认构建即可：
 
 ```bash
 cd D:\code\pycharmProject\bookToVoice
 
-# 构建
+# 构建（默认构建本机架构）
 docker build -t booktovoice:latest .
 
 # 导出为 tar.gz（压缩，体积约为镜像的 40-60%）
 docker save booktovoice:latest | gzip > booktovoice.tar.gz
 ```
 
-得到 `booktovoice.tar.gz`（约 200-300MB）。
+#### 方式二：在 Windows 上打包 ARM64 镜像（给 RK3588 等 ARM NAS）
 
-> 不压缩（.tar）用 `docker save -o booktovoice.tar booktovoice:latest`，文件更大但导入略快。
+开发机是 x86、NAS 是 ARM64 时，`docker build` 默认只会构建出 amd64 镜像，ARM NAS 导入后会报「**不支持的架构格式** / `exec format error`」。需用 **buildx 跨架构构建**（Docker Desktop 自带 QEMU，可直接交叉构建）：
+
+```bash
+cd D:\code\pycharmProject\bookToVoice
+
+# 1. 创建并启用 buildx 构建器（只需一次）
+docker buildx create --use --name armbuilder
+docker buildx inspect --bootstrap
+
+# 2. 交叉构建 arm64 镜像，直接导出成 tar，再 gzip（产物名与方式一一致）
+docker buildx build --platform linux/arm64 -t booktovoice:latest -o type=docker,dest=booktovoice.tar .
+docker buildx build --pull=false --platform linux/arm64 -t booktovoice:latest -o type=docker,dest=booktovoice.tar .
+
+gzip booktovoice.tar
+```
+
+两种方式最终都得到 `booktovoice.tar.gz`（约 200-300MB），后续「传到 NAS → 导入 → 启动」步骤完全相同。
+
+> 依赖（fastapi / uvicorn / jinja2 / edge-tts）全是纯 Python，均有 arm64 预编译 wheel，跨架构构建不会卡在 C 编译上。
+> 不压缩（.tar）：方式一用 `docker save -o booktovoice.tar booktovoice:latest`；方式二去掉最后的 `gzip` 即可（直接产出 `booktovoice.tar`），文件更大但导入略快。
 
 ### 2. 传到 NAS
 
@@ -185,7 +212,7 @@ docker compose up -d
 开发机重新构建 + 导出 → 覆盖传到 NAS → 重新导入 → 重启：
 
 ```bash
-# 开发机
+# 开发机（x86 NAS 用方式一，ARM NAS 用方式二的 buildx 命令）
 docker build -t booktovoice:latest .
 docker save booktovoice:latest | gzip > booktovoice.tar.gz
 
@@ -193,6 +220,8 @@ docker save booktovoice:latest | gzip > booktovoice.tar.gz
 docker load -i booktovoice.tar.gz
 docker compose up -d        # 检测到镜像更新会重建容器
 ```
+
+> ARM NAS（RK3588 等）更新时同样要改用**方式二**的 `docker buildx build --platform linux/arm64 ...` 跨架构重新构建，否则又会导成 amd64 导致容器起不来。
 
 ### 常用运维命令
 
@@ -290,16 +319,17 @@ docker compose up -d        # 检测到镜像更新会重建容器
 
 ## 故障排查
 
-| 现象                                           | 排查                                                                                            |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 章节合成失败                                   | `docker compose logs -f book-service` 看错误；多为到微软的网络波动，会自动重试                  |
-| 首次合成就失败                                 | 按上面「验证部署」第 3 步测容器内 edge-tts 连通性                                               |
-| 端口 `3033` 被占用                             | 改 compose 里 `ports` 的宿主机端口                                                              |
-| compose 报 `image not found` / `no such image` | 镜像未导入：先 `docker load -i booktovoice.tar.gz`，再 `docker images \| grep booktovoice` 确认 |
-| 上传后提示「未解析到任何章节」                 | TXT 缺 `第X章`/`Chapter N` 标题；正常会按字数兜底分块                                           |
-| TXT 中文乱码                                   | 已支持 utf-8/gb18030/big5 等多编码自动识别；如仍乱码，把文件另存为 UTF-8                        |
-| 中断后想继续                                   | 直接重新启动即可——已生成的 mp3 会自动跳过                                                       |
-| 生成的 mp3 在哪                                | 宿主机 `output/<书名>/` 目录                                                                    |
+| 现象                                              | 排查                                                                                                                                                                                                                          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 章节合成失败                                      | `docker compose logs -f book-service` 看错误；多为到微软的网络波动，会自动重试                                                                                                                                                |
+| 首次合成就失败                                    | 按上面「验证部署」第 3 步测容器内 edge-tts 连通性                                                                                                                                                                             |
+| 端口 `3033` 被占用                                | 改 compose 里 `ports` 的宿主机端口                                                                                                                                                                                            |
+| compose 报 `image not found` / `no such image`    | 镜像未导入：先 `docker load -i booktovoice.tar.gz`，再 `docker images \| grep booktovoice` 确认                                                                                                                               |
+| 导入后报「不支持的架构格式」/ `exec format error` | 镜像架构与 NAS 不符：x86 开发机默认 `docker build` 出的是 amd64，ARM NAS 用不了。改用「方式二」buildx 跨架构构建 arm64 镜像；导入后用 `docker image inspect booktovoice:latest --format '{{.Architecture}}'` 确认输出 `arm64` |
+| 上传后提示「未解析到任何章节」                    | TXT 缺 `第X章`/`Chapter N` 标题；正常会按字数兜底分块                                                                                                                                                                         |
+| TXT 中文乱码                                      | 已支持 utf-8/gb18030/big5 等多编码自动识别；如仍乱码，把文件另存为 UTF-8                                                                                                                                                      |
+| 中断后想继续                                      | 直接重新启动即可——已生成的 mp3 会自动跳过                                                                                                                                                                                     |
+| 生成的 mp3 在哪                                   | 宿主机 `output/<书名>/` 目录                                                                                                                                                                                                  |
 
 ---
 

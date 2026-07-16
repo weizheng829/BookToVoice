@@ -65,6 +65,18 @@ def _process_chapter(chapter) -> None:
     log.info("开始生成: book=%s chapter[%s] %s -> %s",
              book["name"], chapter["idx"], chapter["title"], out)
     tts.synthesize(text, out, book["voice"], book["rate"], None, book["pitch"])
+    # 合成期间书籍可能被删除 → 删掉刚写出的孤儿文件，不再 set_chapter_done（章节行已级联消失）
+    if not db.get_book(chapter["book_id"]):
+        log.info("合成完成时书籍已被删除，清理孤儿文件: %s", out)
+        try:
+            out.unlink()
+        except OSError:
+            pass
+        try:
+            out.parent.rmdir()  # 仅当目录为空时才删除
+        except OSError:
+            pass
+        return
     db.set_chapter_done(chapter["id"], str(out))
 
 

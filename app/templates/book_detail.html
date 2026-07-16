@@ -19,6 +19,10 @@
     </form>
     {% endif %}
     <a class="btn" href="/">← 返回书架</a>
+    <button class="btn danger" id="delete-btn"
+            data-book-id="{{ book.id }}"
+            data-name="{{ book.name }}"
+            data-done="{{ progress.done }}">🗑 删除</button>
   </div>
 </div>
 
@@ -96,8 +100,23 @@
     {% endfor %}
   </tbody>
 </table>
+
+<dialog id="delete-dialog">
+  <h3>删除有声书</h3>
+  <p>确定删除《<span id="del-name"></span>》？此操作不可撤销，原始 TXT 将一并删除。</p>
+  <p class="del-info">已生成 <strong id="del-done">0</strong> 个语音文件。</p>
+  <p class="del-question">是否保留已生成的语音文件？</p>
+  <form method="dialog" class="dialog-actions">
+    <button class="btn" value="cancel">取消</button>
+    <button class="btn" value="keep">🗑 删除并保留语音</button>
+    <button class="btn danger" value="remove">🗑 删除并清除语音</button>
+  </form>
+</dialog>
+<form id="delete-form" method="post" style="display:none">
+  <input type="hidden" name="keep_audio" value="">
+</form>
 {% endblock %}
 {% block scripts %}
 <script>window.BOOK_ID = {{ book.id }};</script>
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=8"></script>
 {% endblock %}

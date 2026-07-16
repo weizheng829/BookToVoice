@@ -187,3 +187,33 @@ window.previewVoice = async function (btn) {
   timer = setInterval(tick, 3000);
   tick();
 })();
+
+// 删除有声书：原生 <dialog> 三选一（取消 / 删除并保留语音 / 删除并清除语音），提交隐藏表单 POST
+(function () {
+  const dlg = document.getElementById("delete-dialog");
+  if (!dlg) return;                       // 非详情页直接跳过
+  const btn = document.getElementById("delete-btn");
+  const form = document.getElementById("delete-form");
+  const hidden = form && form.querySelector('input[name="keep_audio"]');
+  const nameEl = document.getElementById("del-name");
+  const doneEl = document.getElementById("del-done");
+  let bookId = null;
+
+  if (btn) {
+    bookId = btn.dataset.bookId || window.BOOK_ID;
+    btn.addEventListener("click", () => {
+      if (nameEl) nameEl.textContent = btn.dataset.name || "";
+      if (doneEl) doneEl.textContent = btn.dataset.done || "0";
+      dlg.showModal();
+    });
+  }
+
+  dlg.addEventListener("close", () => {
+    const rv = dlg.returnValue;
+    if (rv !== "keep" && rv !== "remove") return;   // Esc / 取消
+    if (!form || !bookId) return;
+    form.action = `/books/${bookId}/delete`;
+    if (hidden) hidden.value = rv === "keep" ? "1" : "0";
+    form.submit();                          // 普通 POST → 303 → 书架
+  });
+})();

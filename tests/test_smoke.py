@@ -79,9 +79,33 @@ def test_db():
     assert db.get_book(bid)["status"] == "done"
 
 
+def test_db_delete_cascade():
+    config.DB_PATH = Path(tempfile.mktemp(suffix=".db"))
+    config.OUTPUT_DIR = Path(tempfile.mkdtemp())
+    from app import db
+    db._conn = None
+    db.get_db()
+
+    bid = db.create_book("待删除", "/x/src.txt", "zh-CN-XiaoxiaoNeural", "+0%", "+0Hz", True)
+    db.create_chapters(bid, [("第一章", "正文一"), ("第二章", "正文二"), ("第三章", "正文三")])
+    db.set_book_total(bid, 3)
+    chapters = db.list_chapters(bid)
+    db.set_chapter_done(chapters[0]["id"], "/tmp/a/1.mp3")
+    db.set_chapter_done(chapters[1]["id"], "/tmp/a/2.mp3")
+
+    assert db.get_book(bid) is not None
+    assert len(db.list_chapters(bid)) == 3
+
+    db.delete_book(bid)
+
+    assert db.get_book(bid) is None              # 书已删
+    assert db.list_chapters(bid) == []           # 章节由 ON DELETE CASCADE 级联清除
+    assert db.book_progress(bid)["total"] == 0   # 无残留
+
+
 if __name__ == "__main__":
     tests = [test_decode_bytes, test_parse_chapters,
-             test_parse_chapters_fallback, test_db]
+             test_parse_chapters_fallback, test_db, test_db_delete_cascade]
     passed = 0
     for t in tests:
         try:

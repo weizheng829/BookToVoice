@@ -168,3 +168,23 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 .rate-control { display: flex; align-items: center; gap: 10px; }
 .rate-control .rate-range { flex: 1; accent-color: var(--primary); }
 .rate-control .rate-num { width: 64px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+
+/* 删除按钮 + 确认弹窗 */
+.btn.danger { color: var(--fail); border-color: #f0c7cb; }
+.btn.danger:hover { background: #fbe2e5; }
+
+dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  max-width: 440px;
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0,0,0,.18);
+}
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h3 { margin: 0 0 12px; font-size: 17px; }
+dialog p { margin: 6px 0; font-size: 14px; }
+dialog .del-info { color: var(--muted); }
+dialog .del-info strong { color: var(--text); }
+dialog .del-question { font-weight: 600; margin-top: 12px; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 18px; }

@@ -154,6 +154,12 @@ def update_book_settings(book_id: int, voice: str | None = None,
         cur.execute(f"UPDATE books SET {','.join(fields)} WHERE id=?", vals)
 
 
+def delete_book(book_id: int) -> None:
+    """删除书籍；章节由 ON DELETE CASCADE 级联清除（依赖 PRAGMA foreign_keys=ON）。"""
+    with db_cursor() as cur:
+        cur.execute("DELETE FROM books WHERE id=?", (book_id,))
+
+
 # ---------------- chapters ----------------
 
 def create_chapters(book_id: int, chapters: list[tuple[str, str]]):

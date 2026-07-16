@@ -209,6 +209,55 @@ def regenerate_chapter(book_id: int, chapter_id: int):
     return RedirectResponse(url=f"/books/{book_id}", status_code=303)
 
 
+def _cleanup_book_files(chapters) -> None:
+    """删除章节生成的音频文件，并清理空目录。best-effort：失败仅记日志不中断。
+
+    按每章存储的 audio_path 逐个删除（对「改过书名」依然准确，且不会误删同名书的目录）。
+    """
+    dirs: set[Path] = set()
+    for ch in chapters:
+        ap = ch["audio_path"]
+        if not ap:
+            continue
+        p = Path(ap)
+        try:
+            if p.exists():
+                p.unlink()
+            dirs.add(p.parent)
+        except OSError as e:
+            log.warning("删除音频失败 %s: %s", p, e)
+    for d in dirs:
+        try:
+            d.rmdir()  # 仅当目录为空时才删除
+        except OSError:
+            pass
+
+
+@app.post("/books/{book_id}/delete")
+def delete_book(book_id: int, keep_audio: str = Form("")):
+    book = db.get_book(book_id)
+    if not book:
+        raise HTTPException(404, "书籍不存在")
+    chapters = db.list_chapters(book_id)          # 删除前抓取，用于文件清理
+    source_path = book["source_path"]
+    keep = keep_audio.strip().lower() in ("1", "true", "yes", "on")
+
+    db.set_book_paused(book_id, True)             # 先暂停，缩小 worker 抓取窗口
+    db.delete_book(book_id)                       # 先删 DB 行（级联删章节）
+
+    # 文件清理放在 DB 删除之后：DB 失败则回滚、文件原样保留；文件清理失败也只是留孤儿文件并记日志
+    if not keep:
+        _cleanup_book_files(chapters)
+    if source_path:
+        try:
+            Path(source_path).unlink()
+        except OSError as e:
+            log.warning("删除源文件失败 %s: %s", source_path, e)
+
+    log.info("删除有声书 id=%s name=%s keep_audio=%s", book_id, book["name"], keep)
+    return RedirectResponse(url="/", status_code=303)
+
+
 @app.post("/books/{book_id}/settings")
 def update_settings(
     book_id: int,

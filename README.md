@@ -28,6 +28,7 @@
   - [架构](#架构)
   - [目录结构](#目录结构)
   - [前置条件](#前置条件)
+  - [部署（拉取 GHCR 镜像）](#部署拉取-ghcr-镜像)
   - [打包 + 部署（离线镜像）](#打包--部署离线镜像)
     - [1. 开发机构建并导出镜像](#1-开发机构建并导出镜像)
       - [方式一：NAS 与开发机同架构（x86\_64）](#方式一nas-与开发机同架构x86_64)
@@ -100,6 +101,59 @@ bookToVoice/
 - **开发机**（Windows/Mac/Linux）：装有 Docker，用于构建并导出镜像。
 - NAS 端口 `3033` 可用。
 - 容器需能访问外网（连微软 Edge TTS 服务）。
+
+---
+
+## 部署（拉取 GHCR 镜像）
+
+> **推荐、最省事。** 代码推到 `main` 或打 `v*` 版本 tag 后，GitHub Actions 会自动构建 **amd64 + arm64** 双架构镜像并推送到 GHCR；NAS 直接 `docker pull`，**完全不用在本机构建、不用导出 / 传 tar 包**。架构由镜像 manifest 自动匹配，ARM NAS（RK3588 等）和 x86 机器都能直接用。
+
+### 前提
+
+- 已 push 过一次代码触发过 CI（或打过 `v*` tag），本仓库 **Actions** 页能看到 `Build & Publish Docker Image` 跑成功。
+- 镜像地址：`ghcr.io/weizheng829/booktovoice`。
+- **首次发布后**：GHCR package 默认可能继承仓库可见性。若仓库 public 却想免登录拉取，去 GitHub 个人主页 → **Packages**，把 `booktovoice` 这个 package 的可见性设为 **Public**。仓库私有则保持 private，NAS 拉取前需先 `docker login ghcr.io`（用 personal access token，权限勾 `read:packages`）。
+
+### 在 NAS 上拉取并启动
+
+放一份 `docker-compose.yml`（把 `image` 指向 GHCR，volume 路径换成你 NAS 的）：
+
+```yaml
+services:
+  book-service:
+    image: ghcr.io/weizheng829/booktovoice:latest
+    container_name: book-service
+    ports:
+      - 3033:3033
+    volumes:
+      - /volume2/SSD/docker/bookToVoice/input:/app/input
+      - /volume2/SSD/docker/bookToVoice/output:/app/output
+      - /volume2/SSD/docker/bookToVoice/data:/app/data
+    restart: always
+```
+
+```bash
+cd /volume2/SSD/docker/bookToVoice
+docker compose pull        # 拉取最新镜像（自动选 amd64/arm64）
+docker compose up -d       # 启动 / 重建容器
+```
+
+> 不需要传 `app/`、`Dockerfile`、`requirements.txt`、tar 包——都在镜像里了。
+> `input/ output/ data/` 不用提前建，compose 启动时自动创建。
+
+### 更新镜像（代码改完重新部署）
+
+```bash
+# 等本仓库 CI 跑完，NAS 上执行：
+docker compose pull && docker compose up -d
+docker image prune -f      # 可选：清理旧镜像
+```
+
+只锁定某个版本（打 tag `v1.2.0` 时 CI 会产出 `:1.2.0` / `:1.2` / `:1`），把 `image` 改成：
+
+```yaml
+image: ghcr.io/weizheng829/booktovoice:1.2.0
+```
 
 ---
 

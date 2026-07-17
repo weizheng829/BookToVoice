@@ -1,0 +1,63 @@
+name: Build & Publish Docker Image
+
+# 推送到 main，或打 v* 版本 tag 时触发；
+# 也可在 GitHub Actions 页面手动触发（workflow_dispatch）。
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # 推送到 GHCR 所需权限
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # QEMU 让 buildx 能在 x86 runner 上交叉构建 arm64 镜像
+      # 依赖全是纯 Python（fastapi/uvicorn/jinja2/edge-tts），均有 arm64 wheel，不会卡 C 编译
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 自动生成 tag：
+      #   - push main      -> :main-<sha>、:latest
+      #   - 打 tag v1.2.0  -> :1.2.0、:1.2、:1、:latest
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/weizheng829/booktovoice
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=short,prefix=main-,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+
+      - name: Build & push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false   # 关掉 attestation，保证群晖等旧客户端 docker pull 兼容
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

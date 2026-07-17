@@ -12,7 +12,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # 创建 Release / 上传 tar 资产所需
       packages: write   # 推送到 GHCR 所需权限
 
     steps:
@@ -61,3 +61,32 @@ jobs:
           provenance: false   # 关掉 attestation，保证群晖等旧客户端 docker pull 兼容
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ===== 仅在打 v* tag 时：导出离线 tar 并附到 GitHub Release =====
+      # 产物内镜像名统一为 booktovoice:latest，与「离线部署」compose 的 image 一致
+      - name: Export amd64 image tar
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -t booktovoice:latest \
+            --cache-from type=gha \
+            -o type=docker,dest=booktovoice-amd64.tar .
+          gzip -f booktovoice-amd64.tar
+
+      - name: Export arm64 image tar
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker buildx build --platform linux/arm64 \
+            -t booktovoice:latest \
+            --cache-from type=gha \
+            -o type=docker,dest=booktovoice-arm64.tar .
+          gzip -f booktovoice-arm64.tar
+
+      - name: Attach tars to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            booktovoice-amd64.tar.gz
+            booktovoice-arm64.tar.gz

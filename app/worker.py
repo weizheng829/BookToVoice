@@ -10,7 +10,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, db, tts
+from . import config, db, parser, tts
 
 log = logging.getLogger("worker")
 
@@ -39,7 +39,10 @@ def _build_text(chapter, book) -> str:
     body = chapter["text"].strip()
     if body:
         parts.append(body)
-    return "\n".join(parts)
+    text = "\n".join(parts)
+    if book["strip_watermarks"]:
+        text = parser.strip_watermarks(text)  # 按特征剔除网文站点水印（仅影响朗读内容）
+    return text
 
 
 def _process_chapter(chapter) -> None:

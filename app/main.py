@@ -69,6 +69,7 @@ def new_book_form(request: Request):
             "voices": config.VOICE_OPTIONS,
             "default_voice": config.DEFAULT_VOICE,
             "narrate_default": config.NARRATE_TITLE_DEFAULT,
+            "strip_default": config.STRIP_WATERMARKS_DEFAULT,
         },
     )
 
@@ -80,6 +81,7 @@ async def create_book(
     voice: str = Form(""),
     rate: str = Form("+0%"),
     narrate_title: str = Form(""),
+    strip_watermarks: str = Form(""),
 ):
     raw = await file.read()
     content = parser.decode_bytes(raw)
@@ -87,6 +89,7 @@ async def create_book(
     book_name = name.strip() or Path(file.filename or "book").stem
     voice = voice.strip() or config.DEFAULT_VOICE
     narrate = narrate_title == "on"
+    strip = strip_watermarks == "on"
 
     chapters = parser.parse_chapters(content)
     if not chapters:
@@ -99,7 +102,7 @@ async def create_book(
     src.write_text(content, encoding="utf-8")
 
     book_id = db.create_book(
-        book_name, str(src), voice, rate, config.DEFAULT_PITCH, narrate
+        book_name, str(src), voice, rate, config.DEFAULT_PITCH, narrate, strip
     )
     db.create_chapters(book_id, chapters)
     db.set_book_total(book_id, len(chapters))
@@ -265,6 +268,7 @@ def update_settings(
     voice: str = Form(""),
     rate: str = Form(""),
     narrate_title: str = Form(""),
+    strip_watermarks: str = Form(""),
 ):
     if not db.get_book(book_id):
         raise HTTPException(404)
@@ -274,6 +278,7 @@ def update_settings(
         voice=voice.strip() or None,
         rate=rate.strip() or None,
         narrate_title=(narrate_title == "on"),
+        strip_watermarks=(strip_watermarks == "on"),
     )
     return RedirectResponse(url=f"/books/{book_id}", status_code=303)
 

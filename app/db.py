@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS books (
     rate          TEXT    NOT NULL DEFAULT '+0%',
     pitch         TEXT    NOT NULL DEFAULT '+0Hz',
     narrate_title INTEGER NOT NULL DEFAULT 1,
+    strip_watermarks INTEGER NOT NULL DEFAULT 0,
     paused        INTEGER NOT NULL DEFAULT 0,
     total_chapters INTEGER DEFAULT 0,
     status        TEXT    NOT NULL DEFAULT 'pending',  -- pending/running/done/failed
@@ -53,6 +54,8 @@ def _migrate(conn) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(books)")}
     if "paused" not in cols:
         conn.execute("ALTER TABLE books ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
+    if "strip_watermarks" not in cols:
+        conn.execute("ALTER TABLE books ADD COLUMN strip_watermarks INTEGER NOT NULL DEFAULT 0")
 
 
 def get_db() -> sqlite3.Connection:
@@ -86,14 +89,17 @@ def db_cursor():
 
 # ---------------- books ----------------
 
-def create_book(name, source_path, voice, rate, pitch, narrate_title: bool) -> int:
+def create_book(name, source_path, voice, rate, pitch, narrate_title: bool,
+                strip_watermarks: bool = False) -> int:
     ts = now()
     with db_cursor() as cur:
         cur.execute(
             """INSERT INTO books
-               (name, source_path, voice, rate, pitch, narrate_title, created_at, updated_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (name, source_path, voice, rate, pitch, 1 if narrate_title else 0, ts, ts),
+               (name, source_path, voice, rate, pitch, narrate_title,
+                strip_watermarks, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (name, source_path, voice, rate, pitch, 1 if narrate_title else 0,
+             1 if strip_watermarks else 0, ts, ts),
         )
         return cur.lastrowid
 
@@ -137,6 +143,7 @@ def set_book_total(book_id: int, total: int):
 def update_book_settings(book_id: int, voice: str | None = None,
                          rate: str | None = None,
                          narrate_title: bool | None = None,
+                         strip_watermarks: bool | None = None,
                          name: str | None = None):
     fields, vals = [], []
     if name is not None:
@@ -147,6 +154,8 @@ def update_book_settings(book_id: int, voice: str | None = None,
         fields.append("rate=?"); vals.append(rate)
     if narrate_title is not None:
         fields.append("narrate_title=?"); vals.append(1 if narrate_title else 0)
+    if strip_watermarks is not None:
+        fields.append("strip_watermarks=?"); vals.append(1 if strip_watermarks else 0)
     if not fields:
         return
     fields.append("updated_at=?"); vals.append(now()); vals.append(book_id)

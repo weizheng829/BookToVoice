@@ -47,6 +47,48 @@ def test_parse_chapters_fallback():
     assert len(chapters) >= 1
 
 
+def test_parse_chapters_title_and_body_same_line():
+    # 网文抓取：标题与正文首段挤在同一行 → 不强加长标题，残文并入正文
+    sample = (
+        "第1章 石川跃·普林斯顿的静夜普林斯顿大学校舍区的环型草坪上，有着一座学生们素日见惯的铸铜凋塑。\n"
+        "这是第一章剩下的正文段落。\n"
+        "第2章 短标题\n这是第二章独立的正文段落。\n"
+    )
+    chapters = parser.parse_chapters(sample)
+    titles = [t for t, _ in chapters]
+    bodies = [b for _, b in chapters]
+    # 长残文 → 只保留「第1章」，不把正文强加为标题
+    assert titles[0] == "第1章"
+    assert "铸铜凋塑" in bodies[0], "残文并入正文，首段不丢失"
+    assert "这是第一章剩下的正文段落" in bodies[0]
+    # 短标题（正常排版）→ 照常保留
+    assert titles[1] == "第2章 短标题"
+
+
+def test_strip_watermarks():
+    # 站名不定 → 按「混淆汉字串 + 通用广告前缀」特征过滤，不写死站名。
+    # 用真实站名 + 另一站名 + 完全假名，证明是按特征而非字符串匹配。
+    text = (
+        "前段【更多精彩小说尽在】第　一　版　主　小　说　站后段。"
+        "另一站：更多精彩小说尽在笔　趣　阁　小　说　网他笑了。"
+        "假名也行：更多精彩小说尽在假　站　名　测　试结尾。"
+    )
+    out = parser.strip_watermarks(text)
+    assert "更多精彩小说尽在" not in out, "通用广告前缀剔除"
+    assert "版主" not in out and "趣阁" not in out and "站名" not in out, "任意混淆站名剔除"
+    assert "前段" in out and "后段" in out, "水印两侧正文保留"
+    assert "另一站：他笑了" in out, "水印剔除后正文衔接"
+    assert "假名也行：结尾" in out
+
+
+def test_parse_chapters_does_not_strip_by_default():
+    # 去站名改为「去站名」开关在合成时控制；parse_chapters 默认不去水印。
+    sample = "第1章 标题\n前段【更多精彩小说尽在】假　站　名　测　试后段。\n"
+    body = parser.parse_chapters(sample)[0][1]
+    assert "更多精彩小说尽在" in body, "默认不去水印（交由开关）"
+    assert "前段" in body and "后段" in body
+
+
 def test_db():
     config.DB_PATH = Path(tempfile.mktemp(suffix=".db"))
     config.OUTPUT_DIR = Path(tempfile.mkdtemp())
@@ -79,6 +121,25 @@ def test_db():
     assert db.get_book(bid)["status"] == "done"
 
 
+def test_db_strip_watermarks_flag():
+    # 「去站名」开关持久化 + 可在设置中切换
+    config.DB_PATH = Path(tempfile.mktemp(suffix=".db"))
+    config.OUTPUT_DIR = Path(tempfile.mkdtemp())
+    from app import db
+    db._conn = None
+    db.get_db()
+
+    bid = db.create_book("测试书", "/x", "zh-CN-XiaoxiaoNeural", "+0%", "+0Hz",
+                         True, strip_watermarks=True)
+    assert db.get_book(bid)["strip_watermarks"] == 1, "create_book 持久化开启"
+
+    db.update_book_settings(bid, strip_watermarks=False)
+    assert db.get_book(bid)["strip_watermarks"] == 0, "设置可关闭"
+
+    db.update_book_settings(bid, strip_watermarks=True)
+    assert db.get_book(bid)["strip_watermarks"] == 1, "设置可开启"
+
+
 def test_db_delete_cascade():
     config.DB_PATH = Path(tempfile.mktemp(suffix=".db"))
     config.OUTPUT_DIR = Path(tempfile.mkdtemp())
@@ -105,7 +166,10 @@ def test_db_delete_cascade():
 
 if __name__ == "__main__":
     tests = [test_decode_bytes, test_parse_chapters,
-             test_parse_chapters_fallback, test_db, test_db_delete_cascade]
+             test_parse_chapters_title_and_body_same_line,
+             test_strip_watermarks, test_parse_chapters_does_not_strip_by_default,
+             test_parse_chapters_fallback,
+             test_db, test_db_strip_watermarks_flag, test_db_delete_cascade]
     passed = 0
     for t in tests:
         try:

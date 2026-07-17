@@ -62,6 +62,10 @@
       <input type="checkbox" name="narrate_title" {{ 'checked' if book.narrate_title else '' }}>
       <span>朗读章节标题（仅影响未生成章节）</span>
     </label>
+    <label class="checkbox">
+      <input type="checkbox" name="strip_watermarks" {{ 'checked' if book.strip_watermarks else '' }}>
+      <span>去站名水印（剔除网文站点水印，仅影响未生成章节）</span>
+    </label>
     <div class="preview-box">
       <div class="preview-title">🔊 试听当前声音</div>
       <label class="field" style="margin-bottom:8px">

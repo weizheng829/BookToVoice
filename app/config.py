@@ -13,6 +13,10 @@ DEFAULT_PITCH = os.getenv("DEFAULT_PITCH", "+0Hz")
 NARRATE_TITLE_DEFAULT = os.getenv("NARRATE_TITLE_DEFAULT", "true").lower() in (
     "1", "true", "yes", "on",
 )
+# 去站名水印（合成时剔除网文站点水印），默认关闭：按特征过滤偶有误伤，交由用户勾选
+STRIP_WATERMARKS_DEFAULT = os.getenv("STRIP_WATERMARKS_DEFAULT", "false").lower() in (
+    "1", "true", "yes", "on",
+)
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 RETRY_BACKOFF_BASE = float(os.getenv("RETRY_BACKOFF_BASE", "5"))  # 秒
 WORKER_IDLE_SLEEP = float(os.getenv("WORKER_IDLE_SLEEP", "2"))

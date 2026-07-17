@@ -48,6 +48,10 @@
     <input type="checkbox" name="narrate_title" {{ 'checked' if narrate_default else '' }}>
     <span>朗读章节标题（每章开头念一遍标题）</span>
   </label>
+  <label class="checkbox">
+    <input type="checkbox" name="strip_watermarks" {{ 'checked' if strip_default else '' }}>
+    <span>去站名水印（剔除网文站点插入的水印，按特征识别、不限站名）</span>
+  </label>
   <div class="actions">
     <button class="btn primary" type="submit">上传并开始生成</button>
     <a class="btn" href="/">取消</a>

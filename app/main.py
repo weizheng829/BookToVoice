@@ -62,13 +62,15 @@ def index(request: Request):
 
 @app.get("/books/new", response_class=HTMLResponse)
 def new_book_form(request: Request):
+    s = db.get_settings()  # 默认配音/语速/朗读标题取自全局设置（库值优先，否则回退 env）
     return templates.TemplateResponse(
         "new_book.html",
         {
             "request": request,
             "voices": config.VOICE_OPTIONS,
-            "default_voice": config.DEFAULT_VOICE,
-            "narrate_default": config.NARRATE_TITLE_DEFAULT,
+            "default_voice": s["default_voice"],
+            "default_rate": s["default_rate"],
+            "narrate_default": s["narrate_title"],
             "strip_default": config.STRIP_WATERMARKS_DEFAULT,
         },
     )
@@ -130,6 +132,21 @@ def book_detail(request: Request, book_id: int):
 
 # ---------------- API（轮询/操作）----------------
 
+@app.get("/api/books")
+def api_books():
+    """书架轮询：返回每本书的状态/暂停/进度，供卡片动态刷新。"""
+    return {"books": [
+        {
+            "id": b["id"],
+            "status": b["status"],
+            "paused": bool(b["paused"]),
+            "done": b["done_count"],
+            "total": b["total_chapters"],
+        }
+        for b in db.list_books()
+    ]}
+
+
 @app.get("/api/books/{book_id}")
 def api_book_progress(book_id: int):
     book = db.get_book(book_id)
@@ -148,6 +165,49 @@ def api_book_progress(book_id: int):
         for c in db.list_chapters(book_id)
     ]
     return {"book": dict(book), "progress": progress, "chapters": chapters}
+
+
+@app.get("/api/settings")
+def api_get_settings():
+    """全局设置弹窗：返回当前设置 + 声音下拉选项（一并下发，免得给每个模板路由塞 context）。"""
+    return {"settings": db.get_settings(), "voices": config.VOICE_OPTIONS}
+
+
+@app.post("/api/settings")
+def api_set_settings(
+    worker_concurrency: int = Form(...),
+    max_retries: int = Form(...),
+    retry_backoff_base: float = Form(...),
+    default_voice: str = Form(""),
+    default_rate: str = Form("+0%"),
+    narrate_title: str = Form(""),
+):
+    """保存全局设置：写库持久化 + worker.apply_settings 即时生效（并发动态伸缩）。"""
+    if worker_concurrency < 1:
+        raise HTTPException(400, "并发数至少为 1")
+    if worker_concurrency > 32:
+        raise HTTPException(400, "并发数过大易被 Edge-TTS 限流，请不超过 32")
+    if max_retries < 0:
+        raise HTTPException(400, "最大重试次数不能为负")
+    if retry_backoff_base < 0:
+        raise HTTPException(400, "重试退避秒数不能为负")
+    voice = default_voice.strip() or config.DEFAULT_VOICE
+    rate = default_rate.strip() or "+0%"
+    if not re.match(r"^[+-]?\d+%$", rate):
+        raise HTTPException(400, "语速格式应为如 +10% / -5%")
+    merged = db.set_settings({
+        "worker_concurrency": worker_concurrency,
+        "max_retries": max_retries,
+        "retry_backoff_base": retry_backoff_base,
+        "default_voice": voice,
+        "default_rate": rate,
+        "narrate_title": 1 if narrate_title == "on" else 0,
+    })
+    worker.apply_settings(merged)
+    log.info("全局设置已更新: 并发=%s 重试=%s 退避=%s 声音=%s",
+             merged["worker_concurrency"], merged["max_retries"],
+             merged["retry_backoff_base"], merged["default_voice"])
+    return {"ok": True, "settings": merged}
 
 
 @app.post("/api/preview")

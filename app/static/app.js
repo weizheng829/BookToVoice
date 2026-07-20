@@ -104,17 +104,20 @@ window.previewVoice = async function (btn) {
 })();
 
 // 语速拖拉条初始化（.rate-control 存在时生效；range/number/hidden 联动）
+// hidden 命名为 rate（书表单）或 default_rate（设置弹窗），都能自动接线。
 (function () {
   document.querySelectorAll(".rate-control").forEach((rc) => {
     const field = rc.closest(".field");
     if (!field) return;
     const range = rc.querySelector(".rate-range");
     const num = rc.querySelector(".rate-num");
-    const hidden = field.querySelector("input[name=rate]");
+    const hidden = field.querySelector("input[name=rate], input[name=default_rate]");
+    if (!hidden) return;
     const display = field.querySelector(".rate-display");
+    const fmt = (v) => (v >= 0 ? "+" : "") + v + "%";
     const init = parseInt((hidden.value || "+0%").replace("%", "")) || 0;
     range.value = init; num.value = init;
-    const fmt = (v) => (v >= 0 ? "+" : "") + v + "%";
+    if (display) display.textContent = fmt(init);
     const update = (v) => {
       v = Math.max(-100, Math.min(100, parseInt(v) || 0));
       range.value = v; num.value = v;
@@ -215,5 +218,116 @@ window.previewVoice = async function (btn) {
     form.action = `/books/${bookId}/delete`;
     if (hidden) hidden.value = rv === "keep" ? "1" : "0";
     form.submit();                          // 普通 POST → 303 → 书架
+  });
+})();
+
+// 书架页：每 3 秒轮询所有书的进度/状态，刷新卡片 badge 与进度数字；
+// 仅当存在「生成中且未暂停」的书时持续轮询，全部停工则停止省资源。
+(function () {
+  "use strict";
+  const grid = document.querySelector(".book-grid");
+  if (!grid) return;                       // 非书架页直接跳过
+  const cards = {};
+  grid.querySelectorAll(".card").forEach((a) => { cards[a.dataset.id] = a; });
+  const LABEL = { done: "已完成", running: "生成中", generating: "生成中", pending: "待处理", failed: "失败" };
+  const CLS = { done: "badge ok", running: "badge run", generating: "badge run", pending: "badge wait", failed: "badge fail" };
+  let timer = null;
+
+  async function tick() {
+    try {
+      const res = await fetch("/api/books", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      let active = false;
+      for (const b of data.books) {
+        const card = cards[b.id];
+        if (!card) continue;               // 新增的书需刷新页面才出现
+        const meta = card.querySelector(".card-meta");
+        if (!meta) continue;
+        const badge = b.paused
+          ? '<span class="badge pause">已暂停</span>'
+          : `<span class="${CLS[b.status] || "badge"}">${LABEL[b.status] || b.status}</span>`;
+        const showProg = b.status === "running" || b.status === "generating";
+        if (showProg && !b.paused) active = true;
+        const prog = showProg ? `<span class="card-prog">${b.done}/${b.total}</span>` : "";
+        meta.innerHTML = badge + prog;
+      }
+      if (!active && timer) { clearInterval(timer); timer = null; }  // 全停工 → 停止轮询
+    } catch (e) {
+      /* 网络抖动，忽略 */
+    }
+  }
+
+  timer = setInterval(tick, 3000);
+  tick();
+})();
+
+// 全局设置弹窗（base.html 右上角 ⚙）：打开时 GET 填表，保存时 POST 即时生效。
+(function () {
+  const dlg = document.getElementById("settings-dialog");
+  if (!dlg) return;                         // 守卫：理论上全站都有
+  const btn = document.getElementById("settings-btn");
+  const form = document.getElementById("settings-form");
+  const voiceSel = document.getElementById("settings-voice");
+  const cancelBtn = document.getElementById("settings-cancel");
+  if (!form) return;
+
+  // 把形如 "+10%"/"-5%" 写进拖拉条（range/number/display/hidden）
+  function setRate(val) {
+    const v = parseInt((val || "+0%").replace("%", "")) || 0;
+    const field = form.querySelector("[name=default_rate]").closest(".field");
+    const range = field.querySelector(".rate-range");
+    const num = field.querySelector(".rate-num");
+    const hidden = field.querySelector("[name=default_rate]");
+    const display = field.querySelector(".rate-display");
+    const fmt = (x) => (x >= 0 ? "+" : "") + x + "%";
+    range.value = v; num.value = v; hidden.value = fmt(v);
+    if (display) display.textContent = fmt(v);
+  }
+
+  async function open() {
+    try {
+      const res = await fetch("/api/settings", { cache: "no-store" });
+      if (!res.ok) { alert("读取设置失败"); return; }
+      const data = await res.json();
+      const s = data.settings;
+      voiceSel.innerHTML = data.voices.map(([v, label]) =>
+        `<option value="${v}">${label}（${v}）</option>`).join("");
+      voiceSel.value = s.default_voice;
+      form.worker_concurrency.value = s.worker_concurrency;
+      form.max_retries.value = s.max_retries;
+      form.retry_backoff_base.value = s.retry_backoff_base;
+      form.narrate_title.checked = !!s.narrate_title;
+      setRate(s.default_rate);
+    } catch (e) {
+      alert("读取设置失败：" + e);
+      return;
+    }
+    dlg.showModal();
+  }
+
+  if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); open(); });
+  if (cancelBtn) cancelBtn.addEventListener("click", () => dlg.close());
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const submitBtn = form.querySelector("button.primary");
+    const oldText = submitBtn ? submitBtn.textContent : "";
+    try {
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "保存中…"; }
+      const res = await fetch("/api/settings", { method: "POST", body: new FormData(form) });
+      if (!res.ok) {
+        let msg = "保存失败";
+        try { const d = await res.json(); msg = d.detail || msg; } catch (ex) {}
+        alert(msg);
+        return;
+      }
+      dlg.close();
+      alert("已保存，设置已即时生效");
+    } catch (e) {
+      alert("保存失败：" + e);
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = oldText; }
+    }
   });
 })();

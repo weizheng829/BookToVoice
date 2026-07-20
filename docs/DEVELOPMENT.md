@@ -12,6 +12,7 @@
 - [目录结构](#目录结构)
 - [本地开发](#本地开发)
 - [验证部署](#验证部署)
+- [离线下载（官方 tar）](#离线下载官方-tar)
 - [打包 + 部署（离线镜像）](#打包--部署离线镜像)
   - [前置条件](#前置条件)
   - [1. 开发机构建并导出镜像](#1-开发机构建并导出镜像)
@@ -42,7 +43,7 @@
 ```
 
 - **单容器**：不依赖 EasyVoice，不需要共享 Docker 网络。
-- 串行 worker 逐章合成；失败指数退避重试（最多 3 次）；**目标 mp3 已存在则自动跳过**（文件级断点续传）。
+- 多线程并发 worker 逐章合成（默认 5 路并行）；并发数、重试参数、默认配音等**全局参数可在 Web UI 右上角 ⚙ 设置里调整并即时生效**（并发动态伸缩，不打断正在合成的章节；`WORKER_CONCURRENCY` 等环境变量仅作初始默认，见 [config.py](../app/config.py) 的 `DEFAULT_SETTINGS`）；每章由 `claim_next_chapter()` 原子领取，不会重复合成；失败指数退避重试；**目标 mp3 已存在则自动跳过**（文件级断点续传）。
 - 上传 TXT 自动识别编码（utf-8/gb18030/big5…）。
 
 ---
@@ -62,7 +63,7 @@ bookToVoice/
    ├─ db.py               # SQLite schema + CRUD
    ├─ parser.py           # TXT → 章节；多编码 decode_bytes
    ├─ tts.py              # 直连 edge-tts 合成
-   ├─ worker.py           # 串行 worker + 重试 + 断点续跑
+   ├─ worker.py           # 并发 worker（线程池）+ 原子领章 + 重试 + 断点续跑
    ├─ templates/          # base/index/new_book/book_detail
    └─ static/             # style.css + app.js（进度轮询）
 ```
@@ -106,6 +107,26 @@ uvicorn app.main:app --reload --port 3033
    ```
    生成 `/tmp/t.mp3` 且大小 > 0 即网络与 edge-tts 正常。
 4. **端到端**：上传一本小 TXT，详情页看到进度推进，`output/<书名>/` 下出现 `第0001_*.mp3`。
+
+---
+
+## 离线下载（官方 tar）
+
+> 不能联网拉镜像、又不想自己打包？直接下官方打包好的镜像包即可——CI 打 `v*` tag 时会自动产出并附到 Release。
+
+打 `v*` tag 后，CI 会构建 amd64 / arm64 镜像，并把两个 `.tar.gz` 附到 [GitHub Releases](https://github.com/weizheng829/BookToVoice/releases/latest)：
+
+1. 按 NAS 架构下载：
+   - x86（Intel/AMD）→ `booktovoice-amd64.tar.gz`
+   - ARM（RK3588 / 树莓派 等）→ `booktovoice-arm64.tar.gz`
+   - 不确定架构？在 NAS 执行 `uname -m`：`x86_64` 选 amd64，`aarch64`/`arm64` 选 arm64。
+2. 传到 NAS，导入（导入后镜像名为 `booktovoice:latest`）：
+   ```bash
+   docker load -i booktovoice-<arch>.tar.gz
+   ```
+3. 用 compose 启动（`image: booktovoice:latest`，模板与启动命令见下一节 [打包 + 部署（离线镜像）](#打包--部署离线镜像)）。
+
+> 想自己**改代码后离线打包**、或拿不到官方 tar？见下一节。
 
 ---
 
@@ -257,6 +278,8 @@ docker compose up -d        # 检测到镜像更新会重建容器
 | ---- | --------------------------------------------------- | ------------------------------------------------------------------------ |
 | POST | `/books`                                            | 上传 TXT 建书（multipart：`name`/`file`/`voice`/`rate`/`narrate_title`） |
 | GET  | `/api/books/<book_id>`                              | 查询进度与章节状态（轮询用，JSON）                                       |
+| GET  | `/api/settings`                                     | 读取全局设置 + 声音下拉选项（JSON）                                      |
+| POST | `/api/settings`                                     | 保存全局设置（并发/重试/默认配音），即时生效                             |
 | POST | `/books/<book_id>/retry-failed`                     | 重试所有失败章                                                           |
 | POST | `/books/<book_id>/chapters/<chapter_id>/regenerate` | 重生单章                                                                 |
 | POST | `/books/<book_id>/settings`                         | 改声音 / 朗读标题开关                                                    |

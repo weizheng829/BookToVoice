@@ -42,11 +42,34 @@ CREATE TABLE IF NOT EXISTS chapters (
 );
 CREATE INDEX IF NOT EXISTS idx_chapters_book ON chapters(book_id);
 CREATE INDEX IF NOT EXISTS idx_chapters_status ON chapters(status);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
 def now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _to_int(v, default: int, floor: int | None = None) -> int:
+    """字符串 → int；非法/空回退 default；可选用 floor 兜底下限。"""
+    try:
+        n = int(str(v).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(n, floor) if floor is not None else n
+
+
+def _to_float(v, default: float, floor: float | None = None) -> float:
+    try:
+        n = float(str(v).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(n, floor) if floor is not None else n
 
 
 def _migrate(conn) -> None:
@@ -111,8 +134,16 @@ def get_book(book_id: int):
 
 
 def list_books():
+    """书架列表：附带已生成章节数 done_count，供卡片显示生成进度（如 14/264）。"""
     with db_cursor() as cur:
-        cur.execute("SELECT * FROM books ORDER BY id DESC")
+        cur.execute(
+            """SELECT b.*,
+                      COALESCE(SUM(CASE WHEN c.status='done' THEN 1 ELSE 0 END), 0) AS done_count
+               FROM books b
+               LEFT JOIN chapters c ON c.book_id = b.id
+               GROUP BY b.id
+               ORDER BY b.id DESC"""
+        )
         return cur.fetchall()
 
 
@@ -202,7 +233,10 @@ def get_chapter(chapter_id: int):
 
 
 def get_next_pending_chapter():
-    """取最早一本书的第一个 pending 章节。"""
+    """取最早一本书的第一个 pending 章节（只读，不锁定）。
+
+    注意：并发场景请用 claim_next_chapter()，否则两个 worker 可能读到同一章。
+    """
     with db_cursor() as cur:
         cur.execute(
             """SELECT c.* FROM chapters c
@@ -212,6 +246,30 @@ def get_next_pending_chapter():
                LIMIT 1"""
         )
         return cur.fetchone()
+
+
+def claim_next_chapter():
+    """原子领取最早一本书的第一个 pending 章节并标记为 generating。
+
+    多 worker 并发安全：SELECT + UPDATE 在同一把 _lock 内、同一事务里完成，
+    保证每章只被一个 worker 领到。返回 sqlite3.Row（已置 generating）或 None。
+    """
+    with db_cursor() as cur:
+        cur.execute(
+            """SELECT c.* FROM chapters c
+               JOIN books b ON c.book_id = b.id
+               WHERE c.status='pending' AND b.paused=0
+               ORDER BY c.book_id ASC, c.idx ASC
+               LIMIT 1"""
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        cur.execute(
+            "UPDATE chapters SET status='generating', updated_at=? WHERE id=?",
+            (now(), row["id"]),
+        )
+        return row
 
 
 def set_chapter_generating(chapter_id: int):
@@ -323,3 +381,36 @@ def refresh_book_status(book_id: int):
         update_book_status(book_id, "failed" if p["failed"] > 0 else "done")
     else:
         update_book_status(book_id, "running")
+
+
+# ---------------- 全局设置 ----------------
+
+def get_settings() -> dict:
+    """读取全局设置：库有值则用库值（带类型转换 + 下限保护），否则回退 config.DEFAULT_SETTINGS。"""
+    d = config.DEFAULT_SETTINGS
+    with db_cursor() as cur:
+        cur.execute("SELECT key, value FROM settings")
+        raw = {r["key"]: r["value"] for r in cur.fetchall()}
+    nv = raw.get("narrate_title")
+    return {
+        "worker_concurrency": _to_int(raw.get("worker_concurrency"), d["worker_concurrency"], 1),
+        "max_retries": _to_int(raw.get("max_retries"), d["max_retries"], 0),
+        "retry_backoff_base": _to_float(raw.get("retry_backoff_base"), d["retry_backoff_base"], 0),
+        "default_voice": raw.get("default_voice") or d["default_voice"],
+        "default_rate": raw.get("default_rate") or d["default_rate"],
+        "narrate_title": (str(nv).strip().lower() in ("1", "true", "yes", "on"))
+                         if nv is not None else bool(d["narrate_title"]),
+    }
+
+
+def set_settings(updates: dict) -> dict:
+    """upsert 部分设置键（值统一以字符串落库），返回合并后的完整设置（同 get_settings）。"""
+    ts = now()
+    with db_cursor() as cur:
+        for k, v in updates.items():
+            cur.execute(
+                """INSERT INTO settings(key, value, updated_at) VALUES(?,?,?)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
+                (k, str(v), ts),
+            )
+    return get_settings()

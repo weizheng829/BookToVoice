@@ -26,12 +26,12 @@
     </select>
   </label>
   <div class="field">
-    <span>语速 <span class="rate-display">+0%</span></span>
+    <span>语速 <span class="rate-display">{{ default_rate }}</span></span>
     <div class="rate-control">
       <input type="range" class="rate-range" min="-100" max="100" step="5" value="0">
       <input type="number" class="rate-num" min="-100" max="100" step="5" value="0">
     </div>
-    <input type="hidden" name="rate" value="+0%">
+    <input type="hidden" name="rate" value="{{ default_rate }}">
   </div>
   <div class="preview-box">
     <label class="field" style="margin-bottom:8px">
@@ -60,5 +60,5 @@
 </form>
 {% endblock %}
 {% block scripts %}
-<script src="/static/app.js?v=8"></script>
+<script src="/static/app.js?v=10"></script>
 {% endblock %}

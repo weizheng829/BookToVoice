@@ -71,7 +71,8 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 }
 .card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-2px); }
 .card-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-.card-meta { margin-bottom: 6px; }
+.card-meta { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card-prog { font-size: 12px; font-weight: 600; color: var(--run); font-variant-numeric: tabular-nums; }
 .card-sub { font-size: 13px; color: var(--muted); }
 
 .empty { text-align: center; padding: 60px 0; color: var(--muted); }
@@ -89,6 +90,7 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 .badge.run { background: #fdf1d9; color: var(--run); }
 .badge.fail { background: #fbe2e5; color: var(--fail); }
 .badge.wait { background: #eef1f5; color: var(--muted); }
+.badge.pause { background: #e8edf5; color: #6b7785; }
 
 /* forms */
 .form { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; max-width: 560px; }
@@ -157,6 +159,7 @@ h1 { font-size: 22px; margin: 0 0 16px; }
 .settings-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
 .setting-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .settings-footer { display: flex; justify-content: flex-end; }
+.hint-inline { color: var(--muted); font-size: 12px; font-weight: 400; }
 .preview-title { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
 .settings summary { cursor: pointer; font-weight: 600; color: var(--text); list-style: none; }
 .settings summary::-webkit-details-marker { display: none; }

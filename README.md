@@ -2,7 +2,9 @@
 
 > TXT 小说 → 章节切分 → Edge-TTS → 章节 MP3
 
-独立的 Docker 服务：上传 TXT 小说，自动切分章节，逐章用 **Edge-TTS**（微软）合成 MP3，单旁白配音（默认**晓晓**）、串行生成，自带 Web UI。
+独立的 Docker 服务：上传 TXT 小说，自动切分章节，逐章用 **Edge-TTS**（微软）合成 MP3，单旁白配音（默认**晓晓**）、**多线程并发生成**（默认 5 路并行），自带 Web UI。
+
+> 生成太慢或太快？点页面右上角 **⚙ 设置** 可实时调节并发生成数等参数，保存即生效，无需重启。
 
 **直连 Edge-TTS**：内置 Python `edge-tts` 库，不依赖 EasyVoice 或任何外部 TTS 容器，单容器即可运行。
 
@@ -27,8 +29,6 @@
 - [部署](#部署)
 - [使用流程](#使用流程)
 - [访问地址](#访问地址)
-- [配置（声音 / 语速等）](#配置声音--语速等)
-- [声音说明](#声音说明)
 - [故障排查](#故障排查)
 - [数据与备份](#数据与备份)
 
@@ -62,19 +62,7 @@ docker compose up -d       # 启动 / 重建容器
 
 镜像会按 NAS 架构自动匹配，**x86 机器和 ARM NAS（RK3588 等）都能直接用**。
 
-> - `input/ output/ data/` 不用提前建，compose 启动时自动创建。
-> - 若仓库为 private，拉取前需先 `docker login ghcr.io`（用 personal access token，权限勾 `read:packages`）。
-
-**更新到最新版**（CI 跑完后在 NAS 执行）：
-
-```bash
-docker compose pull && docker compose up -d
-docker image prune -f      # 可选：清理旧镜像
-```
-
-只锁定某个版本（打 tag `v1.2.0` 时产出 `:1.2.0`），把 `image` 改成 `ghcr.io/weizheng829/booktovoice:1.2.0`。
-
-> 不能联网拉镜像、只能导入离线镜像包（`.tar.gz`）？参见 [开发文档 · 打包 + 部署（离线镜像）](docs/DEVELOPMENT.md#打包--部署离线镜像)。
+> **离线部署**（NAS 不能联网拉镜像）：去 [GitHub Releases](https://github.com/weizheng829/BookToVoice/releases/latest) 下载对应架构的 `booktovoice-amd64.tar.gz` / `booktovoice-arm64.tar.gz`，传到 NAS 执行 `docker load -i <文件>`，再用 compose 启动（`image: booktovoice:latest`）。详见[开发文档 · 离线下载](docs/DEVELOPMENT.md#离线下载官方-tar)。
 
 ---
 
@@ -91,45 +79,7 @@ docker image prune -f      # 可选：清理旧镜像
 
 ## 访问地址
 
-`<NAS_IP>` 替换为 NAS 局域网 IP。
-
-| 用途                  | URL                                            |
-| --------------------- | ---------------------------------------------- |
-| **书架主页**          | `http://<NAS_IP>:3033/`                        |
-| 新建有声书（上传 TXT）| `http://<NAS_IP>:3033/books/new`               |
-| 某 book 详情页        | `http://<NAS_IP>:3033/books/<book_id>`         |
-| 全书打包下载          | `http://<NAS_IP>:3033/books/<book_id>/download`|
-| 单章下载/试听         | 见详情页按钮                                   |
-
----
-
-## 配置（声音 / 语速等）
-
-`docker-compose.yml` 默认**不写 `environment`**，直接用内置默认值（晓晓、`+0%`、朗读标题开、重试 3 次）。如需覆盖，给 `book-service` 加一个 `environment:` 段，改完执行 `docker compose up -d`：
-
-```yaml
-    environment:
-      - DEFAULT_VOICE=zh-CN-YunxiNeural
-      - NARRATE_TITLE_DEFAULT=false
-```
-
-| 变量                    | 默认                   | 说明                   |
-| ----------------------- | ---------------------- | ---------------------- |
-| `DEFAULT_VOICE`         | `zh-CN-XiaoxiaoNeural` | 默认声音（晓晓）       |
-| `DEFAULT_RATE`          | `+0%`                  | 默认语速               |
-| `NARRATE_TITLE_DEFAULT` | `true`                 | 新建书默认是否朗读标题 |
-| `MAX_RETRIES`           | `3`                    | 单章最大重试次数       |
-
-> 也可不改全局默认，在**新建有声书 / 详情页设置**时为每本书单独选声音与开关。
-
----
-
-## 声音说明
-
-- 使用微软 Edge 浏览器的 TTS 接口，**免费、无需 API Key**。
-- 常用中文声音：`zh-CN-XiaoxiaoNeural`（晓晓，女）、`zh-CN-YunxiNeural`（云希，男）等。
-- 语速格式为百分比（如 `+50%` / `-20%`）。
-- 容器内执行 `edge-tts --list-voices` 可查全部声音。
+浏览器打开 `http://<NAS_IP>:3033/`（`<NAS_IP>` 替换为 NAS 局域网 IP）。
 
 ---
 

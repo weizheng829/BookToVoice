@@ -11,7 +11,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}BookToVoice{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=4">
+  <link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
   <header class="topbar">
@@ -19,12 +19,57 @@
     <nav>
       <a href="/">书架</a>
       <a href="/books/new">＋ 新建有声书</a>
+      <a href="#" id="settings-btn">⚙ 设置</a>
     </nav>
   </header>
   <main class="container">
     {% block content %}{% endblock %}
   </main>
   <footer class="foot">TXT 小说 → 章节切分 → Edge-TTS → 章节 MP3</footer>
+
+  <dialog id="settings-dialog">
+    <h3>⚙ 全局设置</h3>
+    <form id="settings-form" class="settings-form">
+      <div class="setting-row">
+        <label class="field">
+          <span>并发生成数 <span class="hint-inline">同时合成几章</span></span>
+          <input type="number" name="worker_concurrency" min="1" max="32" value="5">
+        </label>
+        <label class="field">
+          <span>最大重试次数</span>
+          <input type="number" name="max_retries" min="0" max="10" value="3">
+        </label>
+      </div>
+      <label class="field">
+        <span>重试退避基数（秒，每次重试按次数翻倍等待）</span>
+        <input type="number" name="retry_backoff_base" min="0" max="120" step="1" value="5">
+      </label>
+      <div class="setting-row">
+        <label class="field">
+          <span>默认配音声音</span>
+          <select name="default_voice" id="settings-voice"></select>
+        </label>
+        <div class="field">
+          <span>默认语速 <span class="rate-display">+0%</span></span>
+          <div class="rate-control">
+            <input type="range" class="rate-range" min="-100" max="100" step="5" value="0">
+            <input type="number" class="rate-num" min="-100" max="100" step="5" value="0">
+          </div>
+          <input type="hidden" name="default_rate" value="+0%">
+        </div>
+      </div>
+      <label class="checkbox">
+        <input type="checkbox" name="narrate_title">
+        <span>默认朗读章节标题（影响下次「新建有声书」）</span>
+      </label>
+      <p class="hint">并发数与重试参数保存后即时生效；默认声音/语速/朗读标题影响下次新建有声书。</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="settings-cancel">取消</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

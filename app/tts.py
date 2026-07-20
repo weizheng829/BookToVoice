@@ -5,9 +5,20 @@ rate/volume/pitch 为 None 表示不调整。
 """
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 log = logging.getLogger("tts")
+
+# 单次合成超时（秒）。edge-tts 的 WebSocket 在长时间高频请求下偶发「挂死」——
+# 既不返回数据、也不报错、也不关闭，comm.save() 会无限期 await。没有超时的话，
+# 卡死的 worker 线程永远不会释放，多次发生会耗尽整个 worker 池，表现为
+# 「生成卡住、点重生只有 303 无后续」。加超时后抛错 → 走 worker 的退避重试兜底。
+#
+# 超时按文本长度自适应：基础超时 + 每千字额外宽限。短章节挂死能尽快脱困，
+# 长章节（网文动辄数千字）又不会被误判超时连续失败。
+_TTS_TIMEOUT = float(os.getenv("TTS_TIMEOUT", "120"))           # 基础超时（秒）
+_TTS_TIMEOUT_PER_1K = float(os.getenv("TTS_TIMEOUT_PER_1K", "60"))  # 每千字额外宽限（秒）
 
 
 def _norm_percent(v):
@@ -45,8 +56,10 @@ def synthesize(text: str, output_path: Path, voice: str,
         comm = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
         await comm.save(str(tmp))
 
+    # 按文本长度自适应超时：120s 基础 + 每千字 60s 宽限。
+    timeout = _TTS_TIMEOUT + len(text) / 1000 * _TTS_TIMEOUT_PER_1K
     try:
-        asyncio.run(_run())
+        asyncio.run(asyncio.wait_for(_run(), timeout=timeout))
     except Exception as e:  # noqa: BLE001
         if tmp.exists():
             tmp.unlink(missing_ok=True)

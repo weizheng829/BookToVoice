@@ -207,6 +207,14 @@ def regenerate_chapter(book_id: int, chapter_id: int):
     ch = db.get_chapter(chapter_id)
     if not ch or ch["book_id"] != book_id:
         raise HTTPException(404)
+    # 先删旧音频文件：否则 worker 的断点续传会「已存在，跳过」，重生形同虚设。
+    # 用章节里存的 audio_path（而非重算路径），改过书名也能删对文件。best-effort。
+    old_audio = ch["audio_path"]
+    if old_audio:
+        try:
+            Path(old_audio).unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("重生：删除旧音频失败 %s: %s", old_audio, e)
     db.requeue_chapter_by_id(chapter_id)
     db.update_book_status(book_id, "running")
     return RedirectResponse(url=f"/books/{book_id}", status_code=303)
